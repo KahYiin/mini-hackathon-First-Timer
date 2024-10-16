@@ -10,8 +10,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "docx": "^9.0.2",
+    "pdf-parse": "^1.1.1",
+    "pdfjs-dist": "^4.7.76",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-dropzone": "^14.2.9",
+    "tesseract.js": "^5.1.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.11.1",
