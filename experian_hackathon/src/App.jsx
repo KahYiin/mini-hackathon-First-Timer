@@ -1,8 +1,6 @@
 import { useState } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { getDocument } from 'pdfjs-dist/build/pdf';
-import { Document } from 'docx';
-import Tesseract from 'tesseract.js';
+import axios from 'axios';
 import reactLogo from './assets/react.svg';
 import viteLogo from '/vite.svg';
 import './App.css';
@@ -15,36 +13,58 @@ function App() {
     const file = acceptedFiles[0];
     const fileType = file.type;
 
-    if (fileType === 'application/pdf') {
-      const fileReader = new FileReader();
-      fileReader.onload = async function () {
-        const typedArray = new Uint8Array(this.result);
-        const pdf = await getDocument({ data: typedArray }).promise;
-        let text = '';
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const content = await page.getTextContent();
-          text += content.items.map((item) => item.str).join(' ');
-        }
-        extractKeyInformation(text);
-      };
-      fileReader.readAsArrayBuffer(file);
-    } else if (fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-      const data = await file.arrayBuffer();
-      const doc = new Document(data);
-      const text = await doc.getText();
-      extractKeyInformation(text);
-    } else if (fileType.startsWith('image/')) {
-      const { data: { text } } = await Tesseract.recognize(file, 'eng');
-      extractKeyInformation(text);
+    if (fileType === 'application/pdf' || fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || fileType.startsWith('image/')) {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        console.log('Uploading file...');
+        const response = await axios.post(
+          `${import.meta.env.VITE_FORM_RECOGNIZER_ENDPOINT}/formrecognizer/v2.1-preview.3/layout/analyze`,
+          formData,
+          {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+              'Ocp-Apim-Subscription-Key': import.meta.env.VITE_FORM_RECOGNIZER_API_KEY,
+            },
+          }
+        );
+
+        console.log('File uploaded, waiting for analysis...');
+        const operationLocation = response.headers['operation-location'];
+        const result = await getAnalysisResult(operationLocation);
+        extractKeyInformation(result);
+      } catch (error) {
+        console.error('Error uploading file:', error);
+      }
     } else {
       console.error('Unsupported file type');
     }
   };
 
-  const extractKeyInformation = (text) => {
-    // Your extraction logic here...
-    setResumeData(text);
+  const getAnalysisResult = async (operationLocation) => {
+    let result = null;
+    while (!result) {
+      const response = await axios.get(operationLocation, {
+        headers: {
+          'Ocp-Apim-Subscription-Key': import.meta.env.VITE_FORM_RECOGNIZER_API_KEY,
+        },
+      });
+
+      if (response.data.status === 'succeeded') {
+        result = response.data;
+      } else if (response.data.status === 'failed') {
+        throw new Error('Analysis failed');
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+    return result;
+  };
+
+  const extractKeyInformation = (result) => {
+    console.log('Extracted data:', result);
+    setResumeData(JSON.stringify(result, null, 2));
   };
 
   const { getRootProps, getInputProps } = useDropzone({ onDrop });
